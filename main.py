@@ -31,13 +31,36 @@ SP500_TICKERS = sorted(list(set(SP500_TICKERS)))
 def read_root():
     return {
         "status": "active",
-        "market": "S&P 50 Index (Top 50)",
+        "market": "S&P 500 Index (Top 500)",
         "total_supported_stocks": len(SP500_TICKERS),
         "message": "킵앤그로우 S&P 50 프리미엄 리팩토링 백엔드가 안정적으로 구동 중입니다!"
     }
 
+# 💱 [API] 실시간 원/달러 환율 제공 (야후 파이낸스 USDKRW=X 연동)
+@app.get("/api/exchange-rate")
+def get_exchange_rate():
+    # USDKRW=X는 야후 파이낸스의 달러 대비 원화 환율 티커입니다.
+    yf_url = "https://query2.finance.yahoo.com/v8/finance/chart/KRW=X?range=1d&interval=1d"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-# 📊 [API] S&P 50 종목 역사적 일봉 타임라인 차트 수집용 단일 라우트
+    try:
+        res = requests.get(yf_url, headers=headers, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            # 정규 시장의 현재 실시간 환율 값을 추출
+            current_rate = data.get("chart", {}).get("result", [{}])[0].get("meta", {}).get("regularMarketPrice")
+            
+            if current_rate:
+                return {"exchange_rate": current_rate, "status": "live"}
+                
+        # 통신에 실패하거나 값이 없으면 안전을 위해 기본값 1400원을 내려줍니다.
+        return {"exchange_rate": 1400.0, "status": "fallback"}
+        
+    except Exception as e:
+        print(f"환율 통신 에러: {e}")
+        return {"exchange_rate": 1400.0, "status": "error"}
+
+# 📊 [API] S&P 500 종목 역사적 일봉 타임라인 차트 수집용 단일 라우트
 @app.get("/api/candle")
 def get_stock_candle(
     symbol: str = Query(..., description="조회할 S&P 티커 (예: LLY)"),
